@@ -42,4 +42,4 @@ To run the program
 - CSV file exported for all the jobs within the search list
 - Job Status for jobs (Applied, External Application, Failed or Other Reasons)
 
-[I'm an inline-style link with title](https://www.linkedin.com/in/eshan-mandan-719493169/ "LinkedIn Profile")
+[Please connect on LinkedIn for any feedback](https://www.linkedin.com/in/eshan-mandan-719493169/)
