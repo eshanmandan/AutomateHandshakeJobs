@@ -2,7 +2,7 @@
 import pkg_resources
 import time
 import pandas as pd
-import sys
+import re
 from getpass import getpass
 from pathlib import Path
 from selenium import webdriver
@@ -55,6 +55,22 @@ while True:
     else:
         break
 
+#Get Document Name from the user
+while True:
+    resume_aria_label = input("Please enter filename of Resume uploaded to handshake (For reference go to documents on handshake and grab the filename with extenstion which should be used for application) \n")
+    if (len(resume_aria_label) == 0):
+        print("Sorry, this field cannot be blank")
+        continue
+    else:
+        break
+
+while True:
+    transcript_aria_label = input("Please enter filename of Transcript uploaded to handshake (For reference go to documents on handshake and grab the filename with extenstion which should be used for application) \n")
+    if (len(transcript_aria_label) == 0):
+        print("Sorry, this field cannot be blank")
+        continue
+    else:
+        break
         
 #Creating the file if it doesnt exist else reading the csv into a dataframe
 path_to_jobs = Path(__file__).with_name("jobs.csv")
@@ -66,12 +82,14 @@ jobs_columns = [
     ]
 try:
     jobs_df = pd.read_csv(path_to_jobs)
-except pd.errors.EmptyDataError:
+except (pd.errors.EmptyDataError, FileNotFoundError):
     jobs_df = pd.DataFrame(columns=jobs_columns)
+
+job_dict = jobs_df.to_dict()
 
 # Initialzing the driver 
 driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()))
-driver_wait = WebDriverWait(driver,10)
+driver_wait = WebDriverWait(driver,25)
 
 def navigate_to_sso(filter_link, university_name, 
                     student_id, student_password):
@@ -115,7 +133,7 @@ def duo_sso_login():
 
 def job_search_list():
     jobs_array = []
-    WebDriverWait(driver,30).until(EC.visibility_of_element_located((By.CSS_SELECTOR, "main[id='skip-to-content']")))
+    time.sleep(30)
     total_pages = driver.find_element(By.CSS_SELECTOR, "button[data-hook='search-pagination-previous'] ~ div").text.split('/')
     no_of_pages = int(total_pages[1].strip())
     for pages in range(0, no_of_pages):
@@ -126,14 +144,111 @@ def job_search_list():
             jobs_array.append(jobs.get_attribute('href'))
         next_page_selector = "button[data-hook^='search-pagination-next']"
         driver_wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, next_page_selector))).click()
-    return jobs_array
+    return jobs_array, len(jobs_array)
+
+def job_application(update_job_dict):
+    for k,v in update_job_dict['job_link'].items():
+        driver.execute_script("window.open('" + v + "')")
+        time.sleep(10)
+        driver.switch_to.window(driver.window_handles[1])
+        driver_wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "div[data-hook='container']")))
+        job_role_selector = "div[data-hook='container'] > div > h1"
+        job_type_selector = "div[data-hook='container'] > div > div[class^= 'style__job-type']"
+        company_selector = "a[class^='style__employer-name']"
+        location_selector = "a[class^='style__employer-name'] ~ div"
+        deadline_selector = "div[data-hook = 'application-deadline'] > div:nth-child(2)"
+        posted_date_selector = "div[data-hook = 'posted-date'] > div:nth-child(2)"
+        location_type_selector = "div[data-hook = 'location-type'] > div:nth-child(2)"
+        update_job_dict['job_role'][k] = driver.find_element(By.CSS_SELECTOR, job_role_selector).text
+        update_job_dict['job_type'][k] = driver.find_element(By.CSS_SELECTOR, job_type_selector).text
+        update_job_dict['company'][k] = driver.find_element(By.CSS_SELECTOR, company_selector).text
+        update_job_dict['location'][k] = driver.find_element(By.CSS_SELECTOR, location_selector).text
+        update_job_dict['location_type'][k] = driver.find_element(By.CSS_SELECTOR, location_type_selector).text
+        update_job_dict['posted_date'][k] = driver.find_element(By.CSS_SELECTOR, posted_date_selector).text
+        update_job_dict['deadline_date'][k] = driver.find_element(By.CSS_SELECTOR, deadline_selector).text
+        try:
+            time.sleep(3)
+            appliedApplication = driver.find_element(By.CSS_SELECTOR, "div[class^='style__application-flow'] > div > div > h2")
+            if(appliedApplication.is_displayed()):
+                update_job_dict['job_status'][k] = 'Applied'
+                driver.execute_script("window.close()")
+                driver.switch_to.window(driver.window_handles[0])
+                pass
+        except (NoSuchElementException, TimeoutException):
+            try:
+                time.sleep(3)
+                applyExternal = driver.find_element(By.CSS_SELECTOR, "button[data-hook='apply-button'] > span > div")
+                if((applyExternal.is_displayed()==True) and (applyExternal.text == 'Apply Externally')):
+                    update_job_dict['job_status'][k] = 'External Application'
+                    driver.execute_script("window.close()")
+                    driver.switch_to.window(driver.window_handles[0])
+                    pass
+                else:
+                    WebDriverWait(driver,10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-hook='apply-button']"))).click()
+                    'button[aria-label="' + resume_aria_label + '"]'
+                    resumeString = 'button[aria-label="' + resume_aria_label + '"]'
+                    transcriptString = 'button[aria-label="' + transcript_aria_label + '"]'
+                    submitString = 'span[data-hook="submit-application"] > div > button'
+                    try:
+                        time.sleep(3)
+                        transcriptButton = driver.find_element(By.CSS_SELECTOR, transcriptString)
+                        transcriptButton.click()
+                        resumeButton = driver.find_element(By.CSS_SELECTOR, resumeString)
+                        resumeButton.click()
+                        WebDriverWait(driver,10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, submitString))).click()
+                        print("Application Subimtted For ", v)
+                        driver.execute_script("window.close()")
+                        driver.switch_to.window(driver.window_handles[0])
+                        update_job_dict['job_status'][k] = 'Applied'
+                    except (NoSuchElementException, TimeoutException):
+                        try:
+                            time.sleep(3)
+                            resumeButton = driver.find_element(By.CSS_SELECTOR, resumeString)
+                            resumeButton.click()
+                            WebDriverWait(driver,10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, submitString))).click()
+                            print("Application Subimtted For ", v)
+                            driver.execute_script("window.close()")
+                            driver.switch_to.window(driver.window_handles[0])
+                            update_job_dict['job_status'][k] = 'Applied'
+                        except (NoSuchElementException, TimeoutException):
+                            try:
+                                time.sleep(3)
+                                WebDriverWait(driver,10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, submitString))).click()
+                                print("Application Subimtted For ", v)
+                                driver.execute_script("window.close()")
+                                driver.switch_to.window(driver.window_handles[0])    
+                                update_job_dict['job_status'][k] = 'Applied'
+                            except (NoSuchElementException, TimeoutException):
+                                update_job_dict['job_status'][k] = 'Failed or Other Reasons'
+                                driver.execute_script("window.close()")
+                                driver.switch_to.window(driver.window_handles[0])
+                                pass
+            except (NoSuchElementException, TimeoutException):
+                time.sleep(3)
+                update_job_dict['job_status'][k] = 'Failed or Other Reasons'
+                driver.execute_script("window.close()")
+                driver.switch_to.window(driver.window_handles[0])
+                pass
+    return update_job_dict
+
     
 navigate_to_sso(filter_link, university_name, 
                 student_id, student_password) 
 duo_sso_login()
+update_jobs_array, update_jobs_array_length = job_search_list()
+update_job_dict = job_dict
 
-if (jobs_df.empty):
-    jobs_df = pd.DataFrame(columns=jobs_columns)
-    jobs_data = pd.DataFrame({"job_link": job_search_list()}, index=len(job_search_list()))
-    jobs_df = jobs_df.append(jobs_data)
+#Adding only new jobs after comparison from previous list into a new update jobs dict
+# Regex Pattern to find job id from job links
+pattern = re.compile(r'/jobs/(\d+)') 
+for i in range(len(update_jobs_array)):
+    if update_jobs_array[i] not in list(job_dict['job_link'].values()):
+        job_link_len = len(update_job_dict['job_link'].keys())
+        update_job_dict['job_link'][job_link_len + 1] = update_jobs_array[i]
+        update_job_dict['job_id'][job_link_len + 1] = pattern.search(update_jobs_array[i]).group(1)
 
+update_jobs_df = pd.DataFrame(job_application(update_job_dict))
+jobs_df = pd.concat([jobs_df, update_jobs_df], axis=0, ignore_index=True)
+
+#Appending the data back to the file
+jobs_df.to_csv(path_to_jobs)
