@@ -12,6 +12,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.options import Options
+
 
 requirement_path = Path(__file__).with_name("requirements.txt")
 requirements = pkg_resources.parse_requirements(requirement_path.open())
@@ -71,6 +73,17 @@ while True:
         continue
     else:
         break
+
+# Block to check if the user wants to run the code headless or not
+chrome_option = Options()
+while True:
+    is_headless = input("Would you like to run this in the background (Y/N) ? \n")
+    if (len(is_headless) == 0):
+        print("Sorry, this field cannot be blank")
+    else:
+        if (is_headless == 'Y'):
+            chrome_option.add_argument('--headless=new')
+        break
         
 #Creating the file if it doesnt exist else reading the csv into a dataframe
 path_to_jobs = Path(__file__).with_name("jobs.csv")
@@ -88,7 +101,7 @@ except (pd.errors.EmptyDataError, FileNotFoundError):
 job_dict = jobs_df.to_dict()
 
 # Initialzing the driver 
-driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()))
+driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=chrome_option)
 driver_wait = WebDriverWait(driver,25)
 
 def navigate_to_sso(filter_link, university_name, 
